@@ -1,5 +1,6 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 // Fix 1: explicit versions so Gradle (and the IDE script engine) can resolve the plugin
@@ -42,7 +43,7 @@ dependencies {
 intellijPlatform {
     pluginVerification {
         ides {
-            recommended()
+            ide(IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.5")
         }
     }
 
