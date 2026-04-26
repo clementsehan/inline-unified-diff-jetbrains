@@ -133,6 +133,7 @@ class InlineDiffService(private val project: Project) : Disposable {
     fun keepChunk(editor: Editor, chunk: DiffChunk) {
         clearChunkMarkup(editor, chunk)
         editorStates[editor]?.chunks?.remove(chunk)
+        autoToggleOffIfEmpty(editor)
     }
 
     /**
@@ -176,6 +177,11 @@ class InlineDiffService(private val project: Project) : Disposable {
 
         clearChunkMarkup(editor, chunk)
         editorStates[editor]?.chunks?.remove(chunk)
+        autoToggleOffIfEmpty(editor)
+    }
+
+    private fun autoToggleOffIfEmpty(editor: Editor) {
+        if (editorStates[editor]?.chunks?.isEmpty() == true) clearDiff(editor)
     }
 
     override fun dispose() {
