@@ -24,6 +24,10 @@ import com.intellij.openapi.wm.WindowManager
 import com.intellij.ui.JBColor
 import git4idea.repo.GitRepositoryManager
 import java.awt.Color
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
+import javax.swing.JLayeredPane
+import javax.swing.SwingUtilities
 
 /**
  * Project-level service that owns all inline diff state.
@@ -57,12 +61,27 @@ class InlineDiffService(private val project: Project) : Disposable {
         val chunks = mutableListOf<DiffChunk>()
         private val mouseListener = InlineDiffMouseListener { chunks }
 
+        var summaryPanel: DiffSummaryPanel? = null
+        var summaryParent: JLayeredPane? = null
+        var summaryResizeListener: ComponentAdapter? = null
+
         init {
             // addEditorMouseListener(listener, parentDisposable) auto-unregisters on dispose
             editor.addEditorMouseListener(mouseListener, this)
         }
 
-        override fun dispose() = clearAllMarkup()
+        override fun dispose() {
+            summaryResizeListener?.let { editor.component.removeComponentListener(it) }
+            summaryPanel?.let { panel ->
+                summaryParent?.remove(panel)
+                summaryParent?.revalidate()
+                summaryParent?.repaint()
+            }
+            summaryPanel = null
+            summaryParent = null
+            summaryResizeListener = null
+            clearAllMarkup()
+        }
 
         fun clearAllMarkup() {
             chunks.forEach { clearChunkMarkup(editor, it) }
@@ -133,6 +152,7 @@ class InlineDiffService(private val project: Project) : Disposable {
     fun keepChunk(editor: Editor, chunk: DiffChunk) {
         clearChunkMarkup(editor, chunk)
         editorStates[editor]?.chunks?.remove(chunk)
+        updateSummaryCount(editor)
         autoToggleOffIfEmpty(editor)
     }
 
@@ -177,7 +197,20 @@ class InlineDiffService(private val project: Project) : Disposable {
 
         clearChunkMarkup(editor, chunk)
         editorStates[editor]?.chunks?.remove(chunk)
+        updateSummaryCount(editor)
         autoToggleOffIfEmpty(editor)
+    }
+
+    /** Accepts all remaining chunks without modifying the document. */
+    fun keepAll(editor: Editor) {
+        editorStates[editor]?.chunks?.toList()?.forEach { keepChunk(editor, it) }
+    }
+
+    /** Reverts all remaining chunks back to HEAD, bottom-to-top to keep line indices stable. */
+    fun undoAll(editor: Editor) {
+        editorStates[editor]?.chunks
+            ?.sortedByDescending { it.currentStart }
+            ?.forEach { undoChunk(editor, it) }
     }
 
     private fun autoToggleOffIfEmpty(editor: Editor) {
@@ -201,6 +234,61 @@ class InlineDiffService(private val project: Project) : Disposable {
             applyChunkMarkup(editor, chunk)
             state.chunks.add(chunk)
         }
+        attachSummaryPanel(editor, state)
+    }
+
+    // -------------------------------------------------------------------------
+    // Floating summary panel
+    // -------------------------------------------------------------------------
+
+    private fun attachSummaryPanel(editor: Editor, state: EditorDiffState) {
+        val rootPane = SwingUtilities.getRootPane(editor.component) ?: return
+        val layeredPane = rootPane.layeredPane
+
+        val panel = DiffSummaryPanel(
+            onKeepAll = { keepAll(editor) },
+            onUndoAll = { undoAll(editor) },
+        )
+        panel.updateCount(state.chunks.size)
+
+        layeredPane.add(panel, JLayeredPane.POPUP_LAYER as Any)
+
+        val resizeListener = object : ComponentAdapter() {
+            override fun componentResized(e: ComponentEvent) = repositionSummaryPanel(editor, state)
+            override fun componentMoved(e: ComponentEvent)   = repositionSummaryPanel(editor, state)
+        }
+        editor.component.addComponentListener(resizeListener)
+
+        state.summaryPanel = panel
+        state.summaryParent = layeredPane
+        state.summaryResizeListener = resizeListener
+
+        repositionSummaryPanel(editor, state)
+    }
+
+    private fun repositionSummaryPanel(editor: Editor, state: EditorDiffState) {
+        val panel       = state.summaryPanel ?: return
+        val layeredPane = state.summaryParent ?: return
+
+        val ps      = panel.preferredSize
+        panel.size  = ps
+
+        val origin  = SwingUtilities.convertPoint(editor.component, 0, 0, layeredPane)
+        val editorW = editor.component.width
+        val editorH = editor.component.height
+
+        val x = origin.x + (editorW - ps.width)  / 2
+        val y = origin.y +  editorH - ps.height - 16
+
+        panel.setLocation(x, y)
+        layeredPane.revalidate()
+        layeredPane.repaint(x, y, ps.width, ps.height)
+    }
+
+    private fun updateSummaryCount(editor: Editor) {
+        val state = editorStates[editor] ?: return
+        val count = state.chunks.size
+        if (count > 0) state.summaryPanel?.updateCount(count)
     }
 
     private fun applyChunkMarkup(editor: Editor, chunk: DiffChunk) {
