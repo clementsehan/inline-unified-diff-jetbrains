@@ -1,15 +1,57 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.github.clementsehan.inlineunifieddiffjetbrains</id>
-    <name>inline-unified-diff-jetbrains</name>
+    <name>Inline Unified Diff</name>
     <vendor>clementsehan</vendor>
 
+    <!-- Platform base + Git4Idea for repository/HEAD access -->
     <depends>com.intellij.modules.platform</depends>
-
-    <resource-bundle>messages.MyBundle</resource-bundle>
+    <depends>Git4Idea</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.clementsehan.inlineunifieddiffjetbrains.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.clementsehan.inlineunifieddiffjetbrains.startup.MyProjectActivity" />
+        <projectService
+            serviceImplementation="com.github.clementsehan.inlineunifieddiffjetbrains.diff.InlineDiffService"/>
+
+        <!--
+            Status-bar widget: shows a diff icon in the IDE's bottom bar.
+            Active state  → green ApplyNotConflicts icon.
+            Inactive state → regular Diff icon.
+            Click to toggle. Works in all JetBrains IDEs.
+            Can be hidden via View → Appearance → Status Bar Widgets → "Inline Diff".
+        -->
+        <statusBarWidgetFactory
+            id="InlineDiffStatusBarWidget"
+            implementation="com.github.clementsehan.inlineunifieddiffjetbrains.diff.InlineDiffStatusBarWidgetFactory"
+            order="last"/>
     </extensions>
+
+    <actions>
+        <!--
+            ToggleInlineDiffAction
+            ─────────────────────
+            Shortcut  : Ctrl+Alt+Shift+D on all platforms.
+                        On macOS this is ^⌥⇧D (physical Control, not ⌘).
+                        If it doesn't fire, use Find Action (⌘⇧A) and type
+                        "Toggle Inline Diff", or click the toolbar button below.
+
+            Toolbar   : EditorToolbarActionGroup — the icon strip in the top-right
+                        corner of every editor panel (New UI). The button visually
+                        depresses while the diff is active (ToggleAction behaviour).
+
+            Context   : EditorPopupMenu — right-click anywhere in the editor.
+        -->
+        <action
+            id="InlineDiff.Toggle"
+            class="com.github.clementsehan.inlineunifieddiffjetbrains.actions.ToggleInlineDiffAction"
+            text="Toggle Inline Diff View"
+            description="Show/hide Copilot-style inline diff (green = added, red ghost = deleted)">
+
+            <!-- Right-click inside the editor -->
+            <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+
+            <keyboard-shortcut keymap="$default"        first-keystroke="ctrl alt shift D"/>
+            <!-- macOS: keep ctrl (^) to avoid ⌘⌥⇧D which is bound to the yFiles diagram -->
+            <keyboard-shortcut keymap="Mac OS X 10.5+"  first-keystroke="ctrl alt shift D"/>
+        </action>
+    </actions>
 </idea-plugin>

@@ -1,34 +1,64 @@
-# inline-unified-diff-jetbrains
+# Inline Unified Diff
 
 ![Build](https://github.com/clementsehan/inline-unified-diff-jetbrains/workflows/Build/badge.svg)
 [![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
 
-## Template ToDo list
-- [x] Create a new [IntelliJ Platform Plugin Template][template] project.
-- [ ] Get familiar with the [template documentation][template].
-- [ ] Adjust the [group](./gradle.properties), as well as the [id](./src/main/resources/META-INF/plugin.xml), [name](./src/main/resources/META-INF/plugin.xml), and [sources package](./src/main/kotlin).
-- [ ] Adjust the plugin description in `README` (see [Tips][docs:plugin-description])
-- [ ] Review the [Legal Agreements](https://plugins.jetbrains.com/docs/marketplace/legal-agreements.html?from=IJPluginTemplate).
-- [ ] [Publish a plugin manually](https://plugins.jetbrains.com/docs/intellij/publishing-plugin.html?from=IJPluginTemplate) for the first time.
-- [ ] Set the `MARKETPLACE_ID` in the above README badges. You can obtain it once the plugin is published to JetBrains Marketplace.
-- [ ] Set the [Plugin Signing](https://plugins.jetbrains.com/docs/intellij/plugin-signing.html?from=IJPluginTemplate) related [secrets](https://github.com/JetBrains/intellij-platform-plugin-template#environment-variables).
-- [ ] Set the [Deployment Token](https://plugins.jetbrains.com/docs/marketplace/plugin-upload.html?from=IJPluginTemplate).
-- [ ] Click the <kbd>Watch</kbd> button on the top of the [IntelliJ Platform Plugin Template][template] to be notified about releases containing new features and fixes.
-
 <!-- Plugin description -->
-This Fancy IntelliJ Platform Plugin is going to be your implementation of the brilliant ideas that you have.
+**Inline Unified Diff** shows your uncommitted Git changes directly inside the editor — the same way a unified diff looks in a terminal — without switching to a separate diff tool.
 
-This specific section is a source for the [plugin.xml](/src/main/resources/META-INF/plugin.xml) file which will be extracted by the [Gradle](/build.gradle.kts) during the build process.
+When you toggle the diff on, every changed region is annotated inline:
 
-To keep everything working, do not remove `<!-- ... -->` sections. 
+- **Deleted lines** appear as a red ghost block at the exact location where they were removed, showing the original text from HEAD.
+- **Modified lines** show the old version as a red ghost block immediately above the new (green-highlighted) lines.
+- **Added lines** are highlighted in green.
+
+Each annotation includes **✓ Keep** and **↩ Undo** buttons at the bottom of the block:
+
+- **Keep** dismisses the diff overlay for that chunk, leaving your current text as-is.
+- **Undo** reverts the chunk back to the HEAD version (wrapped in a normal undoable write command).
+
+**How to activate**
+
+- Press <kbd>Ctrl+Alt+Shift+D</kbd> to toggle the diff on/off for the current file.
+- Or click the status-bar icon at the bottom of the IDE window.
+- Or right-click in the editor and choose **Toggle Inline Diff View**.
+
+---
+
+**Works with all JetBrains IDEs:** IntelliJ IDEA, PyCharm, WebStorm, GoLand, Rider, CLion, DataGrip, Android Studio, and more.
+
+---
+
+If you find this plugin useful, consider [buying me a coffee ☕](https://ko-fi.com/clemsehan) — it helps keep the project alive!
+
+---
+
+**Keywords:** diff, git diff, inline diff, unified diff, git, VCS, changes, code review, highlight changes, editor overlay
 <!-- Plugin description end -->
+
+## Compatibility
+
+| IDE | Minimum version |
+|-----|----------------|
+| IntelliJ IDEA Community & Ultimate | 2024.1 |
+| PyCharm Community & Professional | 2024.1 |
+| WebStorm | 2024.1 |
+| GoLand | 2024.1 |
+| Rider | 2024.1 |
+| CLion | 2024.1 |
+| RubyMine | 2024.1 |
+| PhpStorm | 2024.1 |
+| DataGrip | 2024.1 |
+| Android Studio | Koala (2024.1) |
+
+Requires the bundled **Git** plugin to be enabled.
 
 ## Installation
 
 - Using the IDE built-in plugin system:
 
-  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "inline-unified-diff-jetbrains"</kbd> >
+  <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>Marketplace</kbd> > <kbd>Search for "Inline Unified Diff"</kbd> >
   <kbd>Install</kbd>
 
 - Using JetBrains Marketplace:
@@ -43,9 +73,11 @@ To keep everything working, do not remove `<!-- ... -->` sections.
   Download the [latest release](https://github.com/clementsehan/inline-unified-diff-jetbrains/releases/latest) and install it manually using
   <kbd>Settings/Preferences</kbd> > <kbd>Plugins</kbd> > <kbd>⚙️</kbd> > <kbd>Install plugin from disk...</kbd>
 
+## Support
+
+If you find this plugin useful, consider [buying me a coffee ☕](https://ko-fi.com/clemsehan) on Ko-fi — it helps keep the project alive!
 
 ---
 Plugin based on the [IntelliJ Platform Plugin Template][template].
 
 [template]: https://github.com/JetBrains/intellij-platform-plugin-template
-[docs:plugin-description]: https://plugins.jetbrains.com/docs/intellij/plugin-user-experience.html#plugin-description-and-presentation
