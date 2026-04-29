@@ -26,7 +26,7 @@ Each annotation includes **✓ Keep** and **↩ Undo** buttons at the bottom of 
 
 ---
 
-**Works with all JetBrains IDEs:** IntelliJ IDEA, PyCharm, WebStorm, GoLand, Rider, CLion, DataGrip, Android Studio, and more./btw
+**Works with all JetBrains IDEs:** IntelliJ IDEA, PyCharm, WebStorm, GoLand, Rider, CLion, DataGrip, Android Studio, and more.
 
 ---
 
