@@ -3,4 +3,7 @@
 .idea
 .intellijPlatform
 .kotlin
+.env
+private.pem
+chain.crt
 build

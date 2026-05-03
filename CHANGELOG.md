@@ -3,6 +3,10 @@
 # inline-unified-diff-jetbrains Changelog
 
 ## [Unreleased]
+### Added
+- Semantic noise reduction: diff chunks that only change whitespace, comments, or formatting are classified as safe and rendered with a muted label (e.g. "✓ Safe: Formatting only", "✓ Safe: Comments modified") so genuinely risky changes stand out
+- Safe classification works for all JetBrains-supported languages via PSI analysis, with an automatic text-based fallback for languages backed by TextMate grammars
+- Safe-deleted chunks (e.g. comment-only removals) display the safe label inline inside the ghost block, to the right of the Keep / Undo buttons
 
 ## [0.0.1] - 2026-04-29
 ### Added

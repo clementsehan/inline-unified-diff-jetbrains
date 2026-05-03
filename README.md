@@ -1,8 +1,8 @@
 # Inline Unified Diff
 
 ![Build](https://github.com/clementsehan/inline-unified-diff-jetbrains/workflows/Build/badge.svg)
-[![Version](https://img.shields.io/jetbrains/plugin/v/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
-[![Downloads](https://img.shields.io/jetbrains/plugin/d/MARKETPLACE_ID.svg)](https://plugins.jetbrains.com/plugin/MARKETPLACE_ID)
+[![Version](https://img.shields.io/jetbrains/plugin/v/31530.svg)](https://plugins.jetbrains.com/plugin/31530)
+[![Downloads](https://img.shields.io/jetbrains/plugin/d/31530.svg)](https://plugins.jetbrains.com/plugin/31530)
 
 <!-- Plugin description -->
 **Inline Unified Diff** shows your uncommitted Git changes directly inside the editor — the same way a unified diff looks in a terminal — without switching to a separate diff tool.

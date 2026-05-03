@@ -9,9 +9,6 @@
     <depends>Git4Idea</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <projectService
-            serviceImplementation="com.github.clementsehan.inlineunifieddiffjetbrains.diff.InlineDiffService"/>
-
         <!--
             Status-bar widget: shows a diff icon in the IDE's bottom bar.
             Active state  → green ApplyNotConflicts icon.
@@ -40,6 +37,7 @@
 
             Context   : EditorPopupMenu — right-click anywhere in the editor.
         -->
+        <!--suppress PluginXmlI18n -->
         <action
             id="InlineDiff.Toggle"
             class="com.github.clementsehan.inlineunifieddiffjetbrains.actions.ToggleInlineDiffAction"
