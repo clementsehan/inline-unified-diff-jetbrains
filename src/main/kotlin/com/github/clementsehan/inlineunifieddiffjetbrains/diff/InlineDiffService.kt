@@ -45,6 +45,7 @@ class InlineDiffService(private val project: Project) : Disposable {
     companion object {
         private val ADDED_BG    = JBColor(Color(0,   200, 80,  40), Color(0,   160, 70,  60))
         private val MODIFIED_BG = JBColor(Color(50,  200, 100, 40), Color(50,  160, 90,  60))
+        private val SAFE_BG     = JBColor(Color(60,  140, 220, 55), Color(50,  110, 190, 75))
 
         fun getInstance(project: Project): InlineDiffService = project.service()
     }
@@ -127,6 +128,9 @@ class InlineDiffService(private val project: Project) : Disposable {
                 }
 
                 val chunks = buildChunks(fragments, baseContent)
+
+                SemanticDiffAnalyzer.getInstance(project)
+                    .annotateChunks(chunks, baseContent, editor.document, virtualFile)
 
                 ApplicationManager.getApplication().invokeLater {
                     if (!editor.isDisposed) {
@@ -291,13 +295,34 @@ class InlineDiffService(private val project: Project) : Disposable {
         if (count > 0) state.summaryPanel?.updateCount(count)
     }
 
+    private fun safeHintLabel(type: SafeChangeType): String = when (type) {
+        SafeChangeType.WHITESPACE  -> "[ ✓ Safe: Formatting only ]"
+        SafeChangeType.COMMENT     -> "[ ✓ Safe: Comments modified ]"
+        SafeChangeType.MIXED_SAFE  -> "[ ✓ Safe: Formatting & comments ]"
+        SafeChangeType.UNSAFE      -> ""
+    }
+
     private fun applyChunkMarkup(editor: Editor, chunk: DiffChunk) {
         val doc         = editor.document
         val markupModel = editor.markupModel
+        val isSafe      = chunk.safeChangeType != SafeChangeType.UNSAFE
 
-        // --- Green background for ADDED / MODIFIED current-doc lines ---------------
+        // --- Safe hint inlay above the chunk's first line -------------------------
+        if (isSafe && chunk.type != DiffType.DELETED && chunk.currentStart < doc.lineCount) {
+            val hintOffset   = doc.getLineStartOffset(chunk.currentStart)
+            val hintRenderer = SafeHintRenderer(safeHintLabel(chunk.safeChangeType))
+            editor.inlayModel
+                .addBlockElement(hintOffset, /*showAbove=*/true, /*showWhenFolded=*/false, /*priority=*/200, hintRenderer)
+                ?.let { chunk.deletedInlays.add(it) }
+        }
+
+        // --- Background for ADDED / MODIFIED current-doc lines -------------------
         if (chunk.type != DiffType.DELETED && chunk.currentStart < chunk.currentEnd) {
-            val bg    = if (chunk.type == DiffType.ADDED) ADDED_BG else MODIFIED_BG
+            val bg = when {
+                isSafe                       -> SAFE_BG
+                chunk.type == DiffType.ADDED -> ADDED_BG
+                else                         -> MODIFIED_BG
+            }
             val attrs = TextAttributes().apply { backgroundColor = bg }
 
             val startOff = doc.getLineStartOffset(chunk.currentStart)
@@ -329,6 +354,7 @@ class InlineDiffService(private val project: Project) : Disposable {
 
             val renderer = InlineDiffRenderer(
                 deletedLines = chunk.baseLines,
+                safeChangeType = if (chunk.type == DiffType.DELETED) chunk.safeChangeType else SafeChangeType.UNSAFE,
                 onKeep = { keepChunk(editor, chunk) },
                 onUndo = { undoChunk(editor, chunk) },
             )
@@ -388,6 +414,8 @@ class InlineDiffService(private val project: Project) : Disposable {
                 type         = type,
                 currentStart = frag.startLine2,
                 currentEnd   = frag.endLine2,
+                baseStart    = frag.startLine1,
+                baseEnd      = frag.endLine1,
                 baseLines    = baseLines.subList(
                     frag.startLine1.coerceIn(0, baseLines.size),
                     frag.endLine1.coerceIn(0, baseLines.size),
