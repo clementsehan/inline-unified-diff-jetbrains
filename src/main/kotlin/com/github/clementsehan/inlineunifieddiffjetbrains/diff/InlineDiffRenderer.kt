@@ -196,10 +196,11 @@ class InlineDiffRenderer(
     }
 
     private fun safeHintText(type: SafeChangeType): String = when (type) {
-        SafeChangeType.WHITESPACE  -> "✓ Safe: Formatting only"
-        SafeChangeType.COMMENT     -> "✓ Safe: Comments modified"
-        SafeChangeType.MIXED_SAFE  -> "✓ Safe: Formatting & comments"
-        SafeChangeType.UNSAFE      -> ""
+        SafeChangeType.WHITESPACE        -> "✓ Safe: Formatting only"
+        SafeChangeType.COMMENT           -> "✓ Safe: Comments modified"
+        SafeChangeType.MIXED_SAFE        -> "✓ Safe: Formatting & comments"
+        SafeChangeType.DEAD_CODE_REMOVAL -> "✓ Safe: Dead code removed"
+        SafeChangeType.UNSAFE            -> ""
     }
 }
 
