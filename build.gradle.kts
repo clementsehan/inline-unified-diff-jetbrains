@@ -6,7 +6,7 @@ import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 // Fix 1: explicit versions so Gradle (and the IDE script engine) can resolve the plugin
 //         classpath without a pluginManagement block in settings.gradle.kts.
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "2.1.20"
+    id("org.jetbrains.kotlin.jvm") version "2.3.21"
     id("org.jetbrains.intellij.platform") version "2.3.0"
     id("org.jetbrains.changelog") version "2.5.0"
 }
