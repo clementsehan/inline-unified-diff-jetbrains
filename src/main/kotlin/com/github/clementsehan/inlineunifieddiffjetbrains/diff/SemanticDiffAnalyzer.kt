@@ -14,11 +14,19 @@ import com.intellij.psi.PsiComment
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiFileFactory
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiNamedElement
+import com.intellij.psi.PsiReferenceExpression
 import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.SyntaxTraverser
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.search.PsiSearchHelper
 import com.intellij.psi.util.PsiTreeUtil
+import com.intellij.util.Processor
+import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtNameReferenceExpression
 
-enum class SafeChangeType { WHITESPACE, COMMENT, MIXED_SAFE, UNSAFE }
+enum class SafeChangeType { WHITESPACE, COMMENT, MIXED_SAFE, DEAD_CODE_REMOVAL, UNSAFE }
 
 /**
  * Project-level service that classifies diff chunks as semantically safe or unsafe
@@ -37,6 +45,64 @@ class SemanticDiffAnalyzer(private val project: Project) {
 
     companion object {
         fun getInstance(project: Project): SemanticDiffAnalyzer = project.service()
+
+        // PsiMethod / PsiReferenceExpression live in the Java plugin (com.intellij.modules.java),
+        // which is absent in non-Java IDEs such as PhpStorm. Guard every reference so those
+        // bytecode instructions are never executed when the Java plugin is not on the classpath.
+        //
+        // Class.forName without an explicit loader uses Thread.currentThread().contextClassLoader,
+        // which in IntelliJ's plugin system is the platform or bootstrap loader — not the plugin's
+        // own PluginClassLoader. Using SemanticDiffAnalyzer::class.java.classLoader ensures we
+        // look up classes through the same loader that owns this class, which has the correct
+        // classpath including optional bundled plugins.
+        val javaPsiAvailable: Boolean by lazy {
+            try { Class.forName("com.intellij.psi.PsiMethod", false, SemanticDiffAnalyzer::class.java.classLoader); true }
+            catch (_: ClassNotFoundException) { false }
+            catch (_: NoClassDefFoundError)   { false }
+        }
+
+        // KtNamedFunction / KtNameReferenceExpression require the Kotlin plugin (optional dep).
+        val kotlinPsiAvailable: Boolean by lazy {
+            try { Class.forName("org.jetbrains.kotlin.psi.KtNamedFunction", false, SemanticDiffAnalyzer::class.java.classLoader); true }
+            catch (_: ClassNotFoundException) { false }
+            catch (_: NoClassDefFoundError)   { false }
+        }
+
+        // JSFunction / JSReferenceExpression cover JavaScript and TypeScript class methods,
+        // getters, setters, and function declarations.
+        //
+        // We resolve the JavaScript plugin's classloader dynamically via PluginManagerCore
+        // rather than declaring an optional <depends> in plugin.xml. This avoids a DevKit
+        // "Cannot resolve plugin" IDE inspection error when developing against Community
+        // edition (which has no JavaScript plugin). The isInstance checks work correctly
+        // because PSI elements created by the JavaScript plugin are instances of classes
+        // loaded by that same classloader.
+        private val jsPluginClassLoader: ClassLoader? by lazy {
+            try {
+                com.intellij.ide.plugins.PluginManagerCore
+                    .getPlugin(com.intellij.openapi.extensions.PluginId.getId("JavaScript"))
+                    ?.pluginClassLoader
+            } catch (_: Throwable) { null }
+        }
+
+        val jsPsiAvailable: Boolean by lazy {
+            val cl = jsPluginClassLoader ?: return@lazy false
+            try { Class.forName("com.intellij.lang.javascript.psi.JSFunction", false, cl); true }
+            catch (_: ClassNotFoundException) { false }
+            catch (_: NoClassDefFoundError)   { false }
+        }
+
+        // Class references cached once for isInstance checks (only accessed when jsPsiAvailable).
+        private val jsFunctionClass: Class<*>? by lazy {
+            val cl = jsPluginClassLoader ?: return@lazy null
+            try { Class.forName("com.intellij.lang.javascript.psi.JSFunction", false, cl) }
+            catch (_: Throwable) { null }
+        }
+        private val jsReferenceExpressionClass: Class<*>? by lazy {
+            val cl = jsPluginClassLoader ?: return@lazy null
+            try { Class.forName("com.intellij.lang.javascript.psi.JSReferenceExpression", false, cl) }
+            catch (_: Throwable) { null }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -62,17 +128,28 @@ class SemanticDiffAnalyzer(private val project: Project) {
     ) {
         ReadAction.run<Throwable> {
             try {
-                val language = (virtualFile.fileType as? LanguageFileType)?.language ?: return@run
+                val fileType = virtualFile.fileType
+                val language = (fileType as? LanguageFileType)?.language
+                thisLogger().warn("[INLINE-DIFF] annotateChunks — file=${virtualFile.name}  fileType=${fileType::class.java.simpleName}  isLanguageFileType=${fileType is LanguageFileType}  language=${language?.id}")
+                if (language == null) {
+                    thisLogger().warn("[INLINE-DIFF] annotateChunks — EARLY EXIT: not a LanguageFileType (TextMate or unknown). Chunks will stay UNSAFE.")
+                    return@run
+                }
 
                 val oldPsiFile = createPsiFile(baseContent, language, virtualFile)
                 val newPsiFile = createPsiFile(document.text, language, virtualFile)
 
                 for (chunk in chunks) {
+                    thisLogger().warn("[INLINE-DIFF] chunk type=${chunk.type} base=${chunk.baseStart}..${chunk.baseEnd} current=${chunk.currentStart}..${chunk.currentEnd}")
                     chunk.safeChangeType = try {
                         val oldRange = baseContentRange(baseContent, chunk.baseStart, chunk.baseEnd)
                         val newRange = documentRange(document, chunk.currentStart, chunk.currentEnd)
-                        analyzeChangeSafety(oldPsiFile, oldRange, newPsiFile, newRange)
+                        thisLogger().warn("[INLINE-DIFF] chunk ranges → oldRange=$oldRange (empty=${oldRange.isEmpty})  newRange=$newRange (empty=${newRange.isEmpty})")
+                        val result = analyzeChangeSafety(oldPsiFile, oldRange, newPsiFile, newRange)
+                        thisLogger().warn("[INLINE-DIFF] chunk result → $result")
+                        result
                     } catch (e: Exception) {
+                        thisLogger().warn("[INLINE-DIFF] chunk analysis threw exception → UNSAFE", e)
                         SafeChangeType.UNSAFE
                     }
                 }
@@ -102,6 +179,7 @@ class SemanticDiffAnalyzer(private val project: Project) {
         // produce a traversable token tree (e.g. TextMate fallback grammars). Fall back
         // to a text-based analysis so comment/whitespace-only changes are still detected.
         if ((oldLeaves.isEmpty() && !oldRange.isEmpty) || (newLeaves.isEmpty() && !newRange.isEmpty)) {
+            thisLogger().warn("[INLINE-DIFF] analyzeChangeSafety — TEXT-BASED FALLBACK (empty leaves): oldLeaves=${oldLeaves.size}  newLeaves=${newLeaves.size}  oldRangeEmpty=${oldRange.isEmpty}  newRangeEmpty=${newRange.isEmpty}  language=${oldFile.language.id}")
             val oldText = if (oldRange.isEmpty) "" else oldFile.text.substring(oldRange.startOffset, oldRange.endOffset)
             val newText = if (newRange.isEmpty) "" else newFile.text.substring(newRange.startOffset, newRange.endOffset)
             return analyzeChangeSafetyTextBased(oldText, newText)
@@ -110,7 +188,22 @@ class SemanticDiffAnalyzer(private val project: Project) {
         val oldMeaningful = oldLeaves.filterMeaningful().map { it.text }
         val newMeaningful = newLeaves.filterMeaningful().map { it.text }
 
-        if (oldMeaningful != newMeaningful) return SafeChangeType.UNSAFE
+        thisLogger().warn("[INLINE-DIFF-ANALYZE] oldMeaningful=${oldMeaningful.size} tokens  newMeaningful=${newMeaningful.size} tokens  newRangeEmpty=${newRange.isEmpty}")
+
+        if (oldMeaningful != newMeaningful) {
+            thisLogger().warn("[INLINE-DIFF-ANALYZE] meaningful tokens differ → newRangeEmpty=${newRange.isEmpty}  oldMeaningfulNotEmpty=${oldMeaningful.isNotEmpty()}")
+            // Pure deletion: the new side is empty. Check whether the removed block is a
+            // function/method with zero usages in the project index (dead code removal).
+            if (newRange.isEmpty && oldMeaningful.isNotEmpty()) {
+                val isDead = checkDeadCodeRemoval(oldFile, oldRange)
+                thisLogger().warn("[INLINE-DIFF-ANALYZE] checkDeadCodeRemoval → $isDead")
+                if (isDead) return SafeChangeType.DEAD_CODE_REMOVAL
+            } else {
+                thisLogger().warn("[INLINE-DIFF-ANALYZE] dead code check skipped (newRange not empty or old side has no tokens)")
+            }
+            thisLogger().warn("[INLINE-DIFF-ANALYZE] → UNSAFE")
+            return SafeChangeType.UNSAFE
+        }
 
         val commentsChanged =
             oldLeaves.filterIsInstance<PsiComment>().map { it.text } !=
@@ -126,6 +219,121 @@ class SemanticDiffAnalyzer(private val project: Project) {
             else                                 -> SafeChangeType.WHITESPACE
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Dead-code detection
+    // -------------------------------------------------------------------------
+
+    /**
+     * Returns true if [oldRange] in [oldFile] covers exactly one top-level
+     * function/method declaration AND that function has zero call-sites in the
+     * project index.
+     *
+     * The [oldFile] is an in-memory dummy that is not registered in the index,
+     * so [com.intellij.psi.search.searches.ReferencesSearch] cannot be used
+     * directly on its elements. Instead:
+     *   1. We extract the function name from the dummy PSI.
+     *   2. We query [PsiSearchHelper.processAllFilesWithWord] which hits the
+     *      real word index and visits only files that actually contain the name.
+     *   3. For each such file we walk its PSI and check whether any leaf is a
+     *      genuine call-site reference (not a declaration or import).
+     * This avoids the index-registration requirement while still using the
+     * project's live index for the search.
+     */
+    private fun checkDeadCodeRemoval(oldFile: PsiFile, oldRange: TextRange): Boolean {
+        val log = thisLogger()
+        log.warn("[INLINE-DIFF-DEAD] checkDeadCodeRemoval — javaPsiAvailable=$javaPsiAvailable  kotlinPsiAvailable=$kotlinPsiAvailable  jsPsiAvailable=$jsPsiAvailable")
+        log.warn("[INLINE-DIFF-DEAD] range=${oldRange}  rangeText=${oldFile.text.substring(oldRange.startOffset.coerceAtMost(oldFile.textLength), oldRange.endOffset.coerceAtMost(oldFile.textLength)).take(120).replace('\n', '↵')}")
+
+        val functions = topLevelFunctionsInRange(oldFile, oldRange)
+        if (functions.isEmpty()) {
+            log.warn("[INLINE-DIFF-DEAD] topLevelFunctionsInRange → empty  (no outermost functions found; returning UNSAFE)")
+            return false
+        }
+        log.warn("[INLINE-DIFF-DEAD] topLevelFunctionsInRange → ${functions.map { "${it::class.java.simpleName}(${it.name})" }}")
+
+        val scope  = GlobalSearchScope.projectScope(project)
+        val helper = PsiSearchHelper.getInstance(project)
+
+        for (function in functions) {
+            val name = function.name
+            if (name == null) {
+                log.warn("[INLINE-DIFF-DEAD] function.name is null → returning UNSAFE")
+                return false
+            }
+
+            var hasUsage = false
+            helper.processAllFilesWithWord(name, scope, Processor { file ->
+                log.warn("[INLINE-DIFF-DEAD] visiting file: ${file.name}")
+                val found = SyntaxTraverser.psiTraverser(file)
+                    .filter { leaf -> leaf.firstChild == null && leaf.text == name && isCallSiteLeaf(leaf) }
+                    .any()
+                log.warn("[INLINE-DIFF-DEAD]   → callSiteFound=$found")
+                if (found) hasUsage = true
+                !hasUsage
+            }, true)
+
+            log.warn("[INLINE-DIFF-DEAD] \"$name\" scan complete — hasUsage=$hasUsage")
+            if (hasUsage) {
+                log.warn("[INLINE-DIFF-DEAD] → UNSAFE (\"$name\" has usages)")
+                return false
+            }
+        }
+
+        log.warn("[INLINE-DIFF-DEAD] all ${functions.size} functions are unused → DEAD_CODE_REMOVAL")
+        return true
+    }
+
+    /**
+     * Returns all outermost [PsiMethod], [KtNamedFunction], or [JSFunction] elements
+     * whose [PsiElement.textRange] is fully contained in [range].
+     *
+     * "Outermost" means no other function in the result set contains it —
+     * this correctly handles multiple sibling functions while ignoring nested lambdas.
+     */
+    private fun topLevelFunctionsInRange(file: PsiFile, range: TextRange): List<PsiNamedElement> {
+        val all = SyntaxTraverser.psiTraverser(file)
+            .filter { (javaPsiAvailable && isJavaPsiMethod(it)) || (kotlinPsiAvailable && isKtNamedFunction(it)) || (jsPsiAvailable && isJsFunction(it)) }
+            .toList()
+        thisLogger().warn("[INLINE-DIFF-DEAD] topLevelFunctionInRange — all functions in file: ${all.map { "${it::class.java.simpleName}(${(it as? PsiNamedElement)?.name}, range=${it.textRange})" }}")
+        val functions = all.filter { range.contains(it.textRange) }
+        thisLogger().warn("[INLINE-DIFF-DEAD] topLevelFunctionInRange — functions in range $range: ${functions.map { "${it::class.java.simpleName}(${(it as? PsiNamedElement)?.name})" }}")
+
+        val outermost = functions.filter { fn ->
+            functions.none { other -> other !== fn && other.textRange.contains(fn.textRange) }
+        }
+        thisLogger().warn("[INLINE-DIFF-DEAD] topLevelFunctionInRange — outermost: ${outermost.map { "${it::class.java.simpleName}(${(it as? PsiNamedElement)?.name})" }}")
+
+        return outermost.filterIsInstance<PsiNamedElement>()
+    }
+
+    /**
+     * Returns true when [leaf] is a reference to a named symbol (a call site
+     * or qualified access), not a declaration identifier.
+     *
+     * Java:   `PsiIdentifier` → parent `PsiReferenceExpression` (e.g. `foo()`)
+     * Kotlin: `LeafPsiElement` → parent `KtNameReferenceExpression` (e.g. `foo()`,
+     *         `::foo`, `obj.foo()`) — all count as usages.
+     *
+     * Declaration names (parent is `PsiMethod` or `KtNamedFunction`) are excluded
+     * by this check implicitly, since their parent type is neither of the above.
+     */
+    private fun isCallSiteLeaf(leaf: PsiElement): Boolean {
+        val parent = leaf.parent ?: return false
+        return (javaPsiAvailable    && isJavaPsiReferenceExpression(parent)) ||
+               (kotlinPsiAvailable && isKtNameReferenceExpression(parent)) ||
+               (jsPsiAvailable     && isJsReferenceExpression(parent))
+    }
+
+    // Each helper is isolated so its `is X` bytecode instruction is only ever executed
+    // after the corresponding availability guard confirms the class is on the classpath.
+    private fun isJavaPsiMethod(e: PsiElement): Boolean              = e is PsiMethod
+    private fun isJavaPsiReferenceExpression(e: PsiElement): Boolean = e is PsiReferenceExpression
+    private fun isKtNamedFunction(e: PsiElement): Boolean            = e is KtNamedFunction
+    private fun isKtNameReferenceExpression(e: PsiElement): Boolean  = e is KtNameReferenceExpression
+    // JS/TS: use Class.isInstance since there are no compile-time imports for JSFunction.
+    private fun isJsFunction(e: PsiElement): Boolean             = jsFunctionClass?.isInstance(e) ?: false
+    private fun isJsReferenceExpression(e: PsiElement): Boolean  = jsReferenceExpressionClass?.isInstance(e) ?: false
 
     // -------------------------------------------------------------------------
     // PSI file construction

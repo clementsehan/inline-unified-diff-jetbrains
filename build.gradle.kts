@@ -36,6 +36,9 @@ dependencies {
 
         // Required for GitRepositoryManager and git4idea.* APIs used in InlineDiffService
         bundledPlugin("Git4Idea")
+
+        // Required for KtNamedFunction / KtNameReferenceExpression PSI in SemanticDiffAnalyzer
+        bundledPlugin("org.jetbrains.kotlin")
     }
 }
 

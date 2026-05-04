@@ -7,6 +7,12 @@
     <!-- Platform base + Git4Idea for repository/HEAD access -->
     <depends>com.intellij.modules.platform</depends>
     <depends>Git4Idea</depends>
+    <!--
+        Optional: enables Kotlin function dead-code detection in SemanticDiffAnalyzer.
+        Loaded only when the Kotlin plugin is present; the plugin works without it.
+        K2 mode opt-in and Kotlin-specific extensions live in withKotlin.xml.
+    -->
+    <depends optional="true" config-file="withKotlin.xml">org.jetbrains.kotlin</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!--
