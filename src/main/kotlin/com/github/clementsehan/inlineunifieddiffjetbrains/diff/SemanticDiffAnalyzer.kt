@@ -296,7 +296,18 @@ class SemanticDiffAnalyzer(private val project: Project) {
             .filter { (javaPsiAvailable && isJavaPsiMethod(it)) || (kotlinPsiAvailable && isKtNamedFunction(it)) || (jsPsiAvailable && isJsFunction(it)) }
             .toList()
         thisLogger().warn("[INLINE-DIFF-DEAD] topLevelFunctionInRange — all functions in file: ${all.map { "${it::class.java.simpleName}(${(it as? PsiNamedElement)?.name}, range=${it.textRange})" }}")
-        val functions = all.filter { range.contains(it.textRange) }
+        // "Starts within range" rather than strict containment: when identical trailing
+        // tokens (e.g. `return this;\n}`) appear at the end of both the kept function and
+        // the deleted function, the diff algorithm reuses the second occurrence and shifts
+        // the deletion boundary leftward. This causes the deleted range to begin inside the
+        // kept function's closing tokens, so the deleted function's textRange is no longer
+        // fully contained in the range even though it is the one being removed. A function
+        // whose opening token falls inside the range is the one being deleted; a function
+        // whose start precedes the range is unaffected and its tail in the range is an
+        // alignment artifact.
+        val functions = all.filter {
+            it.textRange.startOffset >= range.startOffset && it.textRange.startOffset < range.endOffset
+        }
         thisLogger().warn("[INLINE-DIFF-DEAD] topLevelFunctionInRange — functions in range $range: ${functions.map { "${it::class.java.simpleName}(${(it as? PsiNamedElement)?.name})" }}")
 
         val outermost = functions.filter { fn ->
