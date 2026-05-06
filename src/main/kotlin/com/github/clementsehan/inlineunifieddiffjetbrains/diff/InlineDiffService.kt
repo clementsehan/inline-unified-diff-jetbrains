@@ -11,6 +11,8 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.LogicalPosition
+import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.TextAttributes
@@ -136,6 +138,7 @@ class InlineDiffService(private val project: Project) : Disposable {
                     if (!editor.isDisposed) {
                         applyDiff(editor, chunks)
                         notifyStatusBar()
+                        scrollToFirstChunk(editor, chunks)
                     }
                 }
             }
@@ -224,6 +227,12 @@ class InlineDiffService(private val project: Project) : Disposable {
     override fun dispose() {
         editorStates.values.toList().forEach { Disposer.dispose(it) }
         editorStates.clear()
+    }
+
+    private fun scrollToFirstChunk(editor: Editor, chunks: List<DiffChunk>) {
+        val first = chunks.firstOrNull() ?: return
+        val line = first.currentStart.coerceIn(0, (editor.document.lineCount - 1).coerceAtLeast(0))
+        editor.scrollingModel.scrollTo(LogicalPosition(line, 0), ScrollType.CENTER)
     }
 
     // -------------------------------------------------------------------------

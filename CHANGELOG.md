@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 ### Added
+- When toggling the inline diff on, the editor automatically scrolls to the first diff chunk in the file
+
+## [0.0.3] - 2026-05-04
+### Added
 - Dead code removal detection: deleted chunks containing functions with no usages in the project index are classified as safe and labelled "✓ Safe: Dead code removed"
 - Dead code detection supports Java, Kotlin, and JavaScript/TypeScript; JS/TS support activates automatically in IDEs with the JavaScript plugin (IntelliJ IDEA Ultimate, WebStorm, etc.)
 - Multi-function chunks are handled: a chunk removing several unused functions at once is marked safe only when every removed function has zero usages
