@@ -33,11 +33,9 @@ class ToggleInlineDiffAction : ToggleAction(), DumbAware {
         if (editor != null && project != null) {
             val active = InlineDiffService.getInstance(project).isActive(editor)
             e.presentation.text = if (active) "Hide Inline Diff" else "Show Inline Diff"
-            // ToggleAction reads this property to render the button as selected in toolbars
-            e.presentation.putClientProperty(SELECTED_PROPERTY, active)
         }
 
-        // Let ToggleAction handle the SELECTED_PROPERTY from isSelected()
+        // super.update calls isSelected() and sets the selected state on the presentation
         super.update(e)
     }
 

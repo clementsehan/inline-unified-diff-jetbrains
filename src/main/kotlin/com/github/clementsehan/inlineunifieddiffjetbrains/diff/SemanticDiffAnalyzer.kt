@@ -126,14 +126,14 @@ class SemanticDiffAnalyzer(private val project: Project) {
         document: Document,
         virtualFile: VirtualFile,
     ) {
-        ReadAction.run<Throwable> {
+        ReadAction.computeCancellable<Unit, Throwable> {
             try {
                 val fileType = virtualFile.fileType
                 val language = (fileType as? LanguageFileType)?.language
                 thisLogger().warn("[INLINE-DIFF] annotateChunks — file=${virtualFile.name}  fileType=${fileType::class.java.simpleName}  isLanguageFileType=${fileType is LanguageFileType}  language=${language?.id}")
                 if (language == null) {
                     thisLogger().warn("[INLINE-DIFF] annotateChunks — EARLY EXIT: not a LanguageFileType (TextMate or unknown). Chunks will stay UNSAFE.")
-                    return@run
+                    return@computeCancellable
                 }
 
                 val oldPsiFile = createPsiFile(baseContent, language, virtualFile)
