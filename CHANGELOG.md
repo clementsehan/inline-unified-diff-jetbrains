@@ -3,6 +3,12 @@
 # inline-unified-diff-jetbrains Changelog
 
 ## [Unreleased]
+### Fixed
+- Dead code removal now correctly identifies deleted chunks whose diff boundary was shifted into the closing tokens of the preceding function due to diff alignment (e.g. identical `return this; }` suffixes)
+- Dead code removal now correctly handles chunks that delete multiple unused functions at once; the chunk is marked safe only when every removed function has zero usages
+- "Keep All" and "Undo All" buttons on the floating summary panel now dismiss the panel and toggle off the diff when the file has no changes
+
+## [0.0.4] - 2026-05-06
 ### Added
 - When toggling the inline diff on, the editor automatically scrolls to the first diff chunk in the file
 

@@ -117,12 +117,12 @@ class InlineDiffService(private val project: Project) : Disposable {
                 }
 
                 indicator.text = "Comparing with working copy…"
-                val currentContent = ReadAction.compute<String, Throwable> {
+                val currentContent = ReadAction.computeCancellable<String, Throwable> {
                     editor.document.text
                 }
 
                 // ComparisonManager must be called inside a read action
-                val fragments = ReadAction.compute<List<LineFragment>, Throwable> {
+                val fragments = ReadAction.computeCancellable<List<LineFragment>, Throwable> {
                     ComparisonManager.getInstance().compareLines(
                         baseContent, currentContent,
                         ComparisonPolicy.DEFAULT, indicator
@@ -211,6 +211,7 @@ class InlineDiffService(private val project: Project) : Disposable {
     /** Accepts all remaining chunks without modifying the document. */
     fun keepAll(editor: Editor) {
         editorStates[editor]?.chunks?.toList()?.forEach { keepChunk(editor, it) }
+        autoToggleOffIfEmpty(editor)
     }
 
     /** Reverts all remaining chunks back to HEAD, bottom-to-top to keep line indices stable. */
@@ -218,6 +219,7 @@ class InlineDiffService(private val project: Project) : Disposable {
         editorStates[editor]?.chunks
             ?.sortedByDescending { it.currentStart }
             ?.forEach { undoChunk(editor, it) }
+        autoToggleOffIfEmpty(editor)
     }
 
     private fun autoToggleOffIfEmpty(editor: Editor) {
