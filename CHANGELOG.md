@@ -3,6 +3,15 @@
 # inline-unified-diff-jetbrains Changelog
 
 ## [Unreleased]
+### Added
+- Keyboard shortcuts to jump between diff chunks: `Ctrl+Alt+Shift+Down` (next) and `Ctrl+Alt+Shift+Up` (previous); wraps around at the first/last chunk and shows a "Chunk N of M" hint
+- "▲ / ▼" navigation buttons on the floating summary panel for mouse-driven chunk navigation
+- "✓ Accept safe" button on the floating summary panel that accepts all safe-classified chunks at once, leaving only unsafe ones for review; the button is hidden when no safe chunks remain
+
+### Fixed
+- K2 mode compatibility declaration moved to the main `plugin.xml` so the plugin verifier detects it correctly (it was previously in the optional `withKotlin.xml` where the verifier could not see it)
+
+## [0.0.5] - 2026-05-30
 ### Fixed
 - Dead code removal now correctly identifies deleted chunks whose diff boundary was shifted into the closing tokens of the preceding function due to diff alignment (e.g. identical `return this; }` suffixes)
 - Dead code removal now correctly handles chunks that delete multiple unused functions at once; the chunk is marked safe only when every removed function has zero usages

@@ -15,8 +15,11 @@ import javax.swing.JPanel
  * layout overhead and the transparency/antialiasing is under our full control.
  */
 class DiffSummaryPanel(
-    private val onKeepAll: () -> Unit,
-    private val onUndoAll: () -> Unit,
+    private val onKeepAll:      () -> Unit,
+    private val onUndoAll:      () -> Unit,
+    private val onNavigatePrev: () -> Unit,
+    private val onNavigateNext: () -> Unit,
+    private val onKeepSafe:     () -> Unit,
 ) : JPanel() {
 
     companion object {
@@ -24,7 +27,9 @@ class DiffSummaryPanel(
         private val TEXT_COLOR  = JBColor(Color(220, 220, 220, 255),  Color(200, 200, 200, 255))
         private val KEEP_BG     = JBColor(Color(40,  160,  60, 230),  Color(30,  130,  50,  230))
         private val UNDO_BG     = JBColor(Color(180,  40,  40, 230),  Color(160,  50,   50, 230))
-        private val BTN_FG      = Color.WHITE
+        private val NAV_BG      = JBColor(Color(70,   70,  85, 220),  Color(90,   90, 105, 220))
+        private val SAFE_BG     = JBColor(Color(30,  120, 185, 230),  Color(25,  100, 160, 230))
+        private val BTN_FG      = JBColor.WHITE
 
         private const val PANEL_H_PAD = 14
         private const val PANEL_V_PAD = 7
@@ -36,10 +41,15 @@ class DiffSummaryPanel(
         private const val FONT_SIZE   = 12f
     }
 
-    private var count = 0
+    private var count   = 0
+    private var hasSafe = false
     private var keepBounds: Rectangle? = null
     private var undoBounds: Rectangle? = null
-    private var hovered = 0  // 0=none 1=keep 2=undo
+    private var prevBounds: Rectangle? = null
+    private var nextBounds: Rectangle? = null
+    private var safeBounds: Rectangle? = null
+    // 0=none 1=keep 2=undo 3=prev 4=next 5=safe
+    private var hovered = 0
 
     init {
         isOpaque = false
@@ -49,6 +59,9 @@ class DiffSummaryPanel(
                 val h = when {
                     keepBounds?.contains(e.point) == true -> 1
                     undoBounds?.contains(e.point) == true -> 2
+                    prevBounds?.contains(e.point) == true -> 3
+                    nextBounds?.contains(e.point) == true -> 4
+                    safeBounds?.contains(e.point) == true -> 5
                     else -> 0
                 }
                 if (h != hovered) {
@@ -66,6 +79,9 @@ class DiffSummaryPanel(
                 when {
                     keepBounds?.contains(e.point) == true -> onKeepAll()
                     undoBounds?.contains(e.point) == true -> onUndoAll()
+                    prevBounds?.contains(e.point) == true -> onNavigatePrev()
+                    nextBounds?.contains(e.point) == true -> onNavigateNext()
+                    safeBounds?.contains(e.point) == true -> onKeepSafe()
                 }
             }
         }
@@ -73,8 +89,13 @@ class DiffSummaryPanel(
         addMouseMotionListener(ma)
     }
 
-    fun updateCount(n: Int) {
-        if (count != n) { count = n; repaint() }
+    fun updateCount(total: Int, safeCount: Int) {
+        val newHasSafe = safeCount > 0
+        if (count != total || hasSafe != newHasSafe) {
+            count   = total
+            hasSafe = newHasSafe
+            repaint()
+        }
     }
 
     override fun getPreferredSize(): Dimension {
@@ -82,9 +103,12 @@ class DiffSummaryPanel(
         val btnFm = getFontMetrics(boldFont())
         val textW = fm.stringWidth("$count remaining")
         val btnH  = btnFm.height + BTN_V_PAD * 2
+        val prevW = btnFm.stringWidth("▲") + BTN_H_PAD * 2
+        val nextW = btnFm.stringWidth("▼") + BTN_H_PAD * 2
+        val safeW = if (hasSafe) btnFm.stringWidth("✓ Accept safe") + BTN_H_PAD * 2 + GAP else 0
         val keepW = btnFm.stringWidth("✓ Keep all") + BTN_H_PAD * 2
         val undoW = btnFm.stringWidth("↩ Undo all") + BTN_H_PAD * 2
-        val w = PANEL_H_PAD * 2 + textW + GAP + keepW + GAP + undoW
+        val w = PANEL_H_PAD * 2 + textW + GAP + prevW + GAP + nextW + GAP + safeW + keepW + GAP + undoW
         val h = PANEL_V_PAD * 2 + maxOf(fm.height, btnH)
         return Dimension(w, h)
     }
@@ -113,31 +137,75 @@ class DiffSummaryPanel(
             g2.color = TEXT_COLOR
             g2.drawString(label, PANEL_H_PAD, midY + fm.ascent / 2 - 1)
 
+            var curX = PANEL_H_PAD + labelW + GAP
+
+            // ▲ prev chunk
+            val prevText = "▲"
+            val prevW    = btnFm.stringWidth(prevText) + BTN_H_PAD * 2
+            val prevY    = midY - btnH / 2
+            g2.composite = alpha(if (hovered == 3) 1.0f else 0.88f)
+            g2.color = NAV_BG
+            g2.fill(RoundRectangle2D.Float(curX.toFloat(), prevY.toFloat(), prevW.toFloat(), btnH.toFloat(), BTN_ARC, BTN_ARC))
+            g2.composite = AlphaComposite.SrcOver
+            g2.color = BTN_FG; g2.font = boldFont
+            g2.drawString(prevText, curX + BTN_H_PAD, prevY + BTN_V_PAD + btnFm.ascent)
+            prevBounds = Rectangle(curX, prevY, prevW, btnH)
+            curX += prevW + GAP
+
+            // ▼ next chunk
+            val nextText = "▼"
+            val nextW    = btnFm.stringWidth(nextText) + BTN_H_PAD * 2
+            val nextY    = midY - btnH / 2
+            g2.composite = alpha(if (hovered == 4) 1.0f else 0.88f)
+            g2.color = NAV_BG
+            g2.fill(RoundRectangle2D.Float(curX.toFloat(), nextY.toFloat(), nextW.toFloat(), btnH.toFloat(), BTN_ARC, BTN_ARC))
+            g2.composite = AlphaComposite.SrcOver
+            g2.color = BTN_FG; g2.font = boldFont
+            g2.drawString(nextText, curX + BTN_H_PAD, nextY + BTN_V_PAD + btnFm.ascent)
+            nextBounds = Rectangle(curX, nextY, nextW, btnH)
+            curX += nextW + GAP
+
+            // ✓ Accept safe (only when safe chunks exist)
+            if (hasSafe) {
+                val safeText = "✓ Accept safe"
+                val safeW    = btnFm.stringWidth(safeText) + BTN_H_PAD * 2
+                val safeY    = midY - btnH / 2
+                g2.composite = alpha(if (hovered == 5) 1.0f else 0.88f)
+                g2.color = SAFE_BG
+                g2.fill(RoundRectangle2D.Float(curX.toFloat(), safeY.toFloat(), safeW.toFloat(), btnH.toFloat(), BTN_ARC, BTN_ARC))
+                g2.composite = AlphaComposite.SrcOver
+                g2.color = BTN_FG; g2.font = boldFont
+                g2.drawString(safeText, curX + BTN_H_PAD, safeY + BTN_V_PAD + btnFm.ascent)
+                safeBounds = Rectangle(curX, safeY, safeW, btnH)
+                curX += safeW + GAP
+            } else {
+                safeBounds = null
+            }
+
             // ✓ Keep all
             val keepText = "✓ Keep all"
             val keepW    = btnFm.stringWidth(keepText) + BTN_H_PAD * 2
-            val keepX    = PANEL_H_PAD + labelW + GAP
             val keepY    = midY - btnH / 2
             g2.composite = alpha(if (hovered == 1) 1.0f else 0.88f)
             g2.color = KEEP_BG
-            g2.fill(RoundRectangle2D.Float(keepX.toFloat(), keepY.toFloat(), keepW.toFloat(), btnH.toFloat(), BTN_ARC, BTN_ARC))
+            g2.fill(RoundRectangle2D.Float(curX.toFloat(), keepY.toFloat(), keepW.toFloat(), btnH.toFloat(), BTN_ARC, BTN_ARC))
             g2.composite = AlphaComposite.SrcOver
             g2.color = BTN_FG; g2.font = boldFont
-            g2.drawString(keepText, keepX + BTN_H_PAD, keepY + BTN_V_PAD + btnFm.ascent)
-            keepBounds = Rectangle(keepX, keepY, keepW, btnH)
+            g2.drawString(keepText, curX + BTN_H_PAD, keepY + BTN_V_PAD + btnFm.ascent)
+            keepBounds = Rectangle(curX, keepY, keepW, btnH)
+            curX += keepW + GAP
 
             // ↩ Undo all
             val undoText = "↩ Undo all"
             val undoW    = btnFm.stringWidth(undoText) + BTN_H_PAD * 2
-            val undoX    = keepX + keepW + GAP
             val undoY    = midY - btnH / 2
             g2.composite = alpha(if (hovered == 2) 1.0f else 0.88f)
             g2.color = UNDO_BG
-            g2.fill(RoundRectangle2D.Float(undoX.toFloat(), undoY.toFloat(), undoW.toFloat(), btnH.toFloat(), BTN_ARC, BTN_ARC))
+            g2.fill(RoundRectangle2D.Float(curX.toFloat(), undoY.toFloat(), undoW.toFloat(), btnH.toFloat(), BTN_ARC, BTN_ARC))
             g2.composite = AlphaComposite.SrcOver
             g2.color = BTN_FG; g2.font = boldFont
-            g2.drawString(undoText, undoX + BTN_H_PAD, undoY + BTN_V_PAD + btnFm.ascent)
-            undoBounds = Rectangle(undoX, undoY, undoW, btnH)
+            g2.drawString(undoText, curX + BTN_H_PAD, undoY + BTN_V_PAD + btnFm.ascent)
+            undoBounds = Rectangle(curX, undoY, undoW, btnH)
         } finally {
             g2.dispose()
         }
