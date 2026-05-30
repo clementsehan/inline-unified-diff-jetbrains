@@ -29,7 +29,7 @@ class DiffSummaryPanel(
         private val UNDO_BG     = JBColor(Color(180,  40,  40, 230),  Color(160,  50,   50, 230))
         private val NAV_BG      = JBColor(Color(70,   70,  85, 220),  Color(90,   90, 105, 220))
         private val SAFE_BG     = JBColor(Color(30,  120, 185, 230),  Color(25,  100, 160, 230))
-        private val BTN_FG      = Color.WHITE
+        private val BTN_FG      = JBColor.WHITE
 
         private const val PANEL_H_PAD = 14
         private const val PANEL_V_PAD = 7
