@@ -17,6 +17,7 @@ import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.markup.HighlighterLayer
 import com.intellij.openapi.editor.markup.HighlighterTargetArea
 import com.intellij.openapi.editor.markup.TextAttributes
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
@@ -255,6 +256,12 @@ class InlineDiffService(private val project: Project) : Disposable {
         HintManager.getInstance().showInformationHint(editor, "Chunk $index of ${chunks.size}")
     }
 
+    fun refreshDiff(editor: Editor) {
+        val virtualFile = FileDocumentManager.getInstance().getFile(editor.document) ?: return
+        clearDiff(editor)
+        computeAndShowDiff(editor, virtualFile, project)
+    }
+
     private fun autoToggleOffIfEmpty(editor: Editor) {
         if (editorStates[editor]?.chunks?.isEmpty() == true) clearDiff(editor)
     }
@@ -299,6 +306,7 @@ class InlineDiffService(private val project: Project) : Disposable {
             onNavigatePrev = { navigatePreviousChunk(editor) },
             onNavigateNext = { navigateNextChunk(editor) },
             onKeepSafe     = { keepAllSafe(editor) },
+            onRefresh      = { refreshDiff(editor) },
         )
         val safeCount = state.chunks.count { it.safeChangeType != SafeChangeType.UNSAFE }
         panel.updateCount(state.chunks.size, safeCount)
