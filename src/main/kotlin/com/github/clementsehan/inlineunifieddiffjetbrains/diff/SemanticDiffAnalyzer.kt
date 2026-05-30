@@ -21,7 +21,6 @@ import com.intellij.psi.PsiWhiteSpace
 import com.intellij.psi.SyntaxTraverser
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiSearchHelper
-import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.Processor
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtNameReferenceExpression
@@ -71,7 +70,7 @@ class SemanticDiffAnalyzer(private val project: Project) {
         // JSFunction / JSReferenceExpression cover JavaScript and TypeScript class methods,
         // getters, setters, and function declarations.
         //
-        // We resolve the JavaScript plugin's classloader dynamically via PluginManagerCore
+        // We resolve the JavaScript plugin's classloader dynamically via PluginManager
         // rather than declaring an optional <depends> in plugin.xml. This avoids a DevKit
         // "Cannot resolve plugin" IDE inspection error when developing against Community
         // edition (which has no JavaScript plugin). The isInstance checks work correctly
@@ -79,8 +78,8 @@ class SemanticDiffAnalyzer(private val project: Project) {
         // loaded by that same classloader.
         private val jsPluginClassLoader: ClassLoader? by lazy {
             try {
-                com.intellij.ide.plugins.PluginManagerCore
-                    .getPlugin(com.intellij.openapi.extensions.PluginId.getId("JavaScript"))
+                com.intellij.ide.plugins.PluginManager.getInstance()
+                    .findEnabledPlugin(com.intellij.openapi.extensions.PluginId.getId("JavaScript"))
                     ?.pluginClassLoader
             } catch (_: Throwable) { null }
         }
@@ -132,7 +131,17 @@ class SemanticDiffAnalyzer(private val project: Project) {
                 val language = (fileType as? LanguageFileType)?.language
                 thisLogger().warn("[INLINE-DIFF] annotateChunks — file=${virtualFile.name}  fileType=${fileType::class.java.simpleName}  isLanguageFileType=${fileType is LanguageFileType}  language=${language?.id}")
                 if (language == null) {
-                    thisLogger().warn("[INLINE-DIFF] annotateChunks — EARLY EXIT: not a LanguageFileType (TextMate or unknown). Chunks will stay UNSAFE.")
+                    thisLogger().warn("[INLINE-DIFF] annotateChunks — no LanguageFileType (TextMate or unknown); using text-based analysis.")
+                    for (chunk in chunks) {
+                        chunk.safeChangeType = try {
+                            val oldText = textForLines(baseContent, chunk.baseStart, chunk.baseEnd)
+                            val newText = textForLines(document.text, chunk.currentStart, chunk.currentEnd)
+                            analyzeChangeSafetyTextBased(oldText, newText)
+                        } catch (e: Exception) {
+                            thisLogger().warn("[INLINE-DIFF] text-based chunk analysis threw exception → UNSAFE", e)
+                            SafeChangeType.UNSAFE
+                        }
+                    }
                     return@computeCancellable
                 }
 
@@ -206,8 +215,8 @@ class SemanticDiffAnalyzer(private val project: Project) {
         }
 
         val commentsChanged =
-            oldLeaves.filterIsInstance<PsiComment>().map { it.text } !=
-            newLeaves.filterIsInstance<PsiComment>().map { it.text }
+            oldLeaves.filter { isCommentOrInsideComment(it) }.map { it.text } !=
+            newLeaves.filter { isCommentOrInsideComment(it) }.map { it.text }
 
         val whitespaceChanged =
             oldLeaves.filterIsInstance<PsiWhiteSpace>().map { it.text } !=
@@ -402,15 +411,31 @@ class SemanticDiffAnalyzer(private val project: Project) {
     }
 
     private fun List<PsiElement>.filterMeaningful(): List<PsiElement> =
-        filter { element ->
-            element !is PsiWhiteSpace &&
-            element !is PsiComment &&
-            // Block comments (e.g. JSDoc /** ... */) are non-leaf PsiComment nodes whose
-            // children are raw doc tokens (DOC_COMMENT_DATA, DOC_TAG_NAME, etc.) — not
-            // PsiComment instances themselves. Without this check those inner tokens pass
-            // the two guards above and are treated as meaningful code, causing UNSAFE.
-            PsiTreeUtil.getParentOfType(element, PsiComment::class.java) == null
+        filter { element -> element !is PsiWhiteSpace && !isCommentOrInsideComment(element) }
+
+    /**
+     * Returns true if [element] is a comment token or lives inside a comment structure.
+     *
+     * Two detection strategies are combined because doc-comment implementations vary by
+     * language plugin:
+     *  - Java `PsiDocComment` implements `PsiComment`, so an `is PsiComment` check on the
+     *    element or any ancestor is sufficient.
+     *  - JavaScript `JSDocComment` does NOT implement `PsiComment`; its inner tokens
+     *    (DOC_COMMENT_DATA, DOC_TAG_NAME, …) are plain leaf elements. Checking the
+     *    element-type debug name for the substring "COMMENT" catches these regardless of
+     *    the plugin's class hierarchy.
+     */
+    private fun isCommentOrInsideComment(element: PsiElement): Boolean {
+        if (element is PsiComment) return true
+        if ((element.node?.elementType?.toString() ?: "").contains("COMMENT", ignoreCase = true)) return true
+        var ancestor: PsiElement? = element.parent
+        while (ancestor != null && ancestor !is PsiFile) {
+            if (ancestor is PsiComment) return true
+            if ((ancestor.node?.elementType?.toString() ?: "").contains("COMMENT", ignoreCase = true)) return true
+            ancestor = ancestor.parent
         }
+        return false
+    }
 
     // -------------------------------------------------------------------------
     // Text-based fallback (for languages without a traversable PSI token tree)
@@ -459,6 +484,13 @@ class SemanticDiffAnalyzer(private val project: Project) {
     // -------------------------------------------------------------------------
     // Range helpers
     // -------------------------------------------------------------------------
+
+    /** Extracts the raw text for lines [startLine]..[endLine) from [text] (0-based, end exclusive). */
+    private fun textForLines(text: String, startLine: Int, endLine: Int): String {
+        val start = lineStartOffset(text, startLine).coerceAtMost(text.length)
+        val end   = lineStartOffset(text, endLine).coerceAtMost(text.length)
+        return if (start >= end) "" else text.substring(start, end)
+    }
 
     /**
      * Converts 0-based [startLine]..[endLine) line indices in [baseContent] to a

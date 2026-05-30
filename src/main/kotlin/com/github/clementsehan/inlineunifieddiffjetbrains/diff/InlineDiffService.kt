@@ -3,6 +3,7 @@ package com.github.clementsehan.inlineunifieddiffjetbrains.diff
 import com.intellij.diff.comparison.ComparisonManager
 import com.intellij.diff.comparison.ComparisonPolicy
 import com.intellij.diff.fragments.LineFragment
+import com.intellij.codeInsight.hint.HintManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
@@ -222,6 +223,38 @@ class InlineDiffService(private val project: Project) : Disposable {
         autoToggleOffIfEmpty(editor)
     }
 
+    /** Keeps all chunks classified as safe, leaving only [SafeChangeType.UNSAFE] chunks for review. */
+    fun keepAllSafe(editor: Editor) {
+        editorStates[editor]?.chunks
+            ?.filter { it.safeChangeType != SafeChangeType.UNSAFE }
+            ?.toList()
+            ?.forEach { keepChunk(editor, it) }
+    }
+
+    fun navigateNextChunk(editor: Editor) {
+        val chunks = editorStates[editor]?.chunks ?: return
+        if (chunks.isEmpty()) return
+        val caretLine = editor.caretModel.logicalPosition.line
+        val target = chunks.firstOrNull { it.currentStart > caretLine } ?: chunks.first()
+        jumpToChunk(editor, chunks, target)
+    }
+
+    fun navigatePreviousChunk(editor: Editor) {
+        val chunks = editorStates[editor]?.chunks ?: return
+        if (chunks.isEmpty()) return
+        val caretLine = editor.caretModel.logicalPosition.line
+        val target = chunks.lastOrNull { it.currentStart < caretLine } ?: chunks.last()
+        jumpToChunk(editor, chunks, target)
+    }
+
+    private fun jumpToChunk(editor: Editor, chunks: List<DiffChunk>, chunk: DiffChunk) {
+        val line = chunk.currentStart.coerceIn(0, (editor.document.lineCount - 1).coerceAtLeast(0))
+        editor.caretModel.moveToLogicalPosition(LogicalPosition(line, 0))
+        editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+        val index = chunks.indexOf(chunk) + 1
+        HintManager.getInstance().showInformationHint(editor, "Chunk $index of ${chunks.size}")
+    }
+
     private fun autoToggleOffIfEmpty(editor: Editor) {
         if (editorStates[editor]?.chunks?.isEmpty() == true) clearDiff(editor)
     }
@@ -261,10 +294,14 @@ class InlineDiffService(private val project: Project) : Disposable {
         val layeredPane = rootPane.layeredPane
 
         val panel = DiffSummaryPanel(
-            onKeepAll = { keepAll(editor) },
-            onUndoAll = { undoAll(editor) },
+            onKeepAll      = { keepAll(editor) },
+            onUndoAll      = { undoAll(editor) },
+            onNavigatePrev = { navigatePreviousChunk(editor) },
+            onNavigateNext = { navigateNextChunk(editor) },
+            onKeepSafe     = { keepAllSafe(editor) },
         )
-        panel.updateCount(state.chunks.size)
+        val safeCount = state.chunks.count { it.safeChangeType != SafeChangeType.UNSAFE }
+        panel.updateCount(state.chunks.size, safeCount)
 
         layeredPane.add(panel, JLayeredPane.POPUP_LAYER as Any)
 
@@ -301,9 +338,12 @@ class InlineDiffService(private val project: Project) : Disposable {
     }
 
     private fun updateSummaryCount(editor: Editor) {
-        val state = editorStates[editor] ?: return
-        val count = state.chunks.size
-        if (count > 0) state.summaryPanel?.updateCount(count)
+        val state  = editorStates[editor] ?: return
+        val chunks = state.chunks
+        if (chunks.isEmpty()) return
+        val safeCount = chunks.count { it.safeChangeType != SafeChangeType.UNSAFE }
+        state.summaryPanel?.updateCount(chunks.size, safeCount)
+        repositionSummaryPanel(editor, state)
     }
 
     private fun safeHintLabel(type: SafeChangeType): String = when (type) {

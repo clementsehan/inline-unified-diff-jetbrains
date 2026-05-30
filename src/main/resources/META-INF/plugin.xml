@@ -10,9 +10,19 @@
     <!--
         Optional: enables Kotlin function dead-code detection in SemanticDiffAnalyzer.
         Loaded only when the Kotlin plugin is present; the plugin works without it.
-        K2 mode opt-in and Kotlin-specific extensions live in withKotlin.xml.
     -->
     <depends optional="true" config-file="withKotlin.xml">org.jetbrains.kotlin</depends>
+
+    <!--
+        Declare K2 mode compatibility. Our PSI usage (KtNamedFunction,
+        KtNameReferenceExpression) is structural traversal only — no K1-specific
+        analysis APIs — so this opt-in is accurate. Placed in the main plugin.xml
+        (not an optional config file) so the plugin verifier can detect it.
+        IntelliJ silently skips this block when the Kotlin plugin is absent.
+    -->
+    <extensions defaultExtensionNs="org.jetbrains.kotlin">
+        <supportsKotlinPluginMode supportsK2="true"/>
+    </extensions>
 
     <extensions defaultExtensionNs="com.intellij">
         <!--
@@ -56,6 +66,26 @@
             <keyboard-shortcut keymap="$default"        first-keystroke="ctrl alt shift D"/>
             <!-- macOS: keep ctrl (^) to avoid ⌘⌥⇧D which is bound to the yFiles diagram -->
             <keyboard-shortcut keymap="Mac OS X 10.5+"  first-keystroke="ctrl alt shift D"/>
+        </action>
+
+        <!--suppress PluginXmlI18n -->
+        <action
+            id="InlineDiff.NextChunk"
+            class="com.github.clementsehan.inlineunifieddiffjetbrains.actions.NavigateNextDiffChunkAction"
+            text="Next Diff Chunk"
+            description="Move to the next diff chunk in the inline diff view">
+            <keyboard-shortcut keymap="$default"        first-keystroke="ctrl alt shift DOWN"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+"  first-keystroke="ctrl alt shift DOWN"/>
+        </action>
+
+        <!--suppress PluginXmlI18n -->
+        <action
+            id="InlineDiff.PrevChunk"
+            class="com.github.clementsehan.inlineunifieddiffjetbrains.actions.NavigatePrevDiffChunkAction"
+            text="Previous Diff Chunk"
+            description="Move to the previous diff chunk in the inline diff view">
+            <keyboard-shortcut keymap="$default"        first-keystroke="ctrl alt shift UP"/>
+            <keyboard-shortcut keymap="Mac OS X 10.5+"  first-keystroke="ctrl alt shift UP"/>
         </action>
     </actions>
 </idea-plugin>
