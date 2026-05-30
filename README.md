@@ -5,7 +5,9 @@
 [![Downloads](https://img.shields.io/jetbrains/plugin/d/31530.svg)](https://plugins.jetbrains.com/plugin/31530)
 
 <!-- Plugin description -->
-**Inline Unified Diff** shows your uncommitted Git changes directly inside the editor — the same way a unified diff looks in a terminal — without switching to a separate diff tool.
+**You want to review your uncommitted changes before committing — but that means opening a diff panel, hunting for the file, scrolling to the right chunk, and then scrolling back to where you were in the editor.** That context switch breaks flow, and it adds up.
+
+**Inline Unified Diff** eliminates the round-trip. It overlays your uncommitted Git changes directly on your code — right where they happened — without leaving the editor.
 
 When you toggle the diff on, every changed region is annotated inline:
 
@@ -13,10 +15,12 @@ When you toggle the diff on, every changed region is annotated inline:
 - **Modified lines** show the old version as a red ghost block immediately above the new (green-highlighted) lines.
 - **Added lines** are highlighted in green.
 
-Each annotation includes **✓ Keep** and **↩ Undo** buttons at the bottom of the block:
+Each chunk shows a **✓ Keep** and an **↩ Undo** button:
 
 - **Keep** dismisses the diff overlay for that chunk, leaving your current text as-is.
 - **Undo** reverts the chunk back to the HEAD version (wrapped in a normal undoable write command).
+
+**Smart safety labels** classify low-risk changes — whitespace adjustments, comment edits, dead code removal — so genuinely risky edits stand out at a glance.
 
 **How to activate**
 
@@ -34,7 +38,7 @@ If you find this plugin useful, consider [buying me a coffee ☕](https://ko-fi.
 
 ---
 
-**Keywords:** diff, git diff, inline diff, unified diff, git, VCS, changes, code review, highlight changes, editor overlay
+**Keywords:** git, diff, code review, vcs, uncommitted changes, inline diff, unified diff, git diff, highlight changes, editor overlay, gutter diff
 <!-- Plugin description end -->
 
 ## Compatibility
