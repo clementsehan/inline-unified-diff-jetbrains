@@ -70,17 +70,17 @@ class SemanticDiffAnalyzer(private val project: Project) {
         // JSFunction / JSReferenceExpression cover JavaScript and TypeScript class methods,
         // getters, setters, and function declarations.
         //
-        // We resolve the JavaScript plugin's classloader dynamically via PluginManager
-        // rather than declaring an optional <depends> in plugin.xml. This avoids a DevKit
-        // "Cannot resolve plugin" IDE inspection error when developing against Community
-        // edition (which has no JavaScript plugin). The isInstance checks work correctly
-        // because PSI elements created by the JavaScript plugin are instances of classes
-        // loaded by that same classloader.
+        // We obtain the JavaScript plugin's classloader via Language.findLanguageByID():
+        // if the JS plugin is present it registers its Language in the platform registry,
+        // and that Language instance's own class is loaded by the JS plugin's classloader.
+        // This uses only public platform API and avoids optional <depends> in plugin.xml
+        // (which would cause a DevKit "Cannot resolve plugin" inspection error when
+        // developing against Community edition, which ships without the JS plugin).
+        // The isInstance checks work correctly because PSI elements produced by the JS
+        // plugin are instances of classes from that same classloader.
         private val jsPluginClassLoader: ClassLoader? by lazy {
             try {
-                com.intellij.ide.plugins.PluginManager.getInstance()
-                    .findEnabledPlugin(com.intellij.openapi.extensions.PluginId.getId("JavaScript"))
-                    ?.pluginClassLoader
+                Language.findLanguageByID("JavaScript")?.javaClass?.classLoader
             } catch (_: Throwable) { null }
         }
 

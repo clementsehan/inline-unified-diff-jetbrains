@@ -9,6 +9,7 @@ Steps:
 3. Update `CHANGELOG.md`:
    - Replace the `## [Unreleased]` heading with `## [<current_version>] - <today>` (keep the content below it intact).
    - Insert a new empty `## [Unreleased]` section immediately above the newly versioned block, separated by a blank line.
+   - Read the new changes and list them under the newly created `## [Unreleased]` section, using the appropriate "### Added", "### Changed", "### Fixed", etc. subheadings as needed.
 
 4. Increment the patch component of the version in `gradle.properties` (e.g. `0.0.5` → `0.0.6`), keeping the `version = ` key intact.
 

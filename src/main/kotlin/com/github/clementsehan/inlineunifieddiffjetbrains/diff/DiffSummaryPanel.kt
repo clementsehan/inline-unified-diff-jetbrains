@@ -20,6 +20,7 @@ class DiffSummaryPanel(
     private val onNavigatePrev: () -> Unit,
     private val onNavigateNext: () -> Unit,
     private val onKeepSafe:     () -> Unit,
+    private val onRefresh:      () -> Unit,
 ) : JPanel() {
 
     companion object {
@@ -29,7 +30,7 @@ class DiffSummaryPanel(
         private val UNDO_BG     = JBColor(Color(180,  40,  40, 230),  Color(160,  50,   50, 230))
         private val NAV_BG      = JBColor(Color(70,   70,  85, 220),  Color(90,   90, 105, 220))
         private val SAFE_BG     = JBColor(Color(30,  120, 185, 230),  Color(25,  100, 160, 230))
-        private val BTN_FG      = JBColor.WHITE
+        private val BTN_FG      = JBColor(Color.WHITE, Color.WHITE)
 
         private const val PANEL_H_PAD = 14
         private const val PANEL_V_PAD = 7
@@ -45,10 +46,11 @@ class DiffSummaryPanel(
     private var hasSafe = false
     private var keepBounds: Rectangle? = null
     private var undoBounds: Rectangle? = null
-    private var prevBounds: Rectangle? = null
-    private var nextBounds: Rectangle? = null
-    private var safeBounds: Rectangle? = null
-    // 0=none 1=keep 2=undo 3=prev 4=next 5=safe
+    private var prevBounds:    Rectangle? = null
+    private var nextBounds:    Rectangle? = null
+    private var safeBounds:    Rectangle? = null
+    private var refreshBounds: Rectangle? = null
+    // 0=none 1=keep 2=undo 3=prev 4=next 5=safe 6=refresh
     private var hovered = 0
 
     init {
@@ -57,11 +59,12 @@ class DiffSummaryPanel(
         val ma = object : MouseAdapter() {
             override fun mouseMoved(e: MouseEvent) {
                 val h = when {
-                    keepBounds?.contains(e.point) == true -> 1
-                    undoBounds?.contains(e.point) == true -> 2
-                    prevBounds?.contains(e.point) == true -> 3
-                    nextBounds?.contains(e.point) == true -> 4
-                    safeBounds?.contains(e.point) == true -> 5
+                    keepBounds?.contains(e.point)    == true -> 1
+                    undoBounds?.contains(e.point)    == true -> 2
+                    prevBounds?.contains(e.point)    == true -> 3
+                    nextBounds?.contains(e.point)    == true -> 4
+                    safeBounds?.contains(e.point)    == true -> 5
+                    refreshBounds?.contains(e.point) == true -> 6
                     else -> 0
                 }
                 if (h != hovered) {
@@ -77,11 +80,12 @@ class DiffSummaryPanel(
             override fun mouseClicked(e: MouseEvent) {
                 if (e.button != MouseEvent.BUTTON1) return
                 when {
-                    keepBounds?.contains(e.point) == true -> onKeepAll()
-                    undoBounds?.contains(e.point) == true -> onUndoAll()
-                    prevBounds?.contains(e.point) == true -> onNavigatePrev()
-                    nextBounds?.contains(e.point) == true -> onNavigateNext()
-                    safeBounds?.contains(e.point) == true -> onKeepSafe()
+                    keepBounds?.contains(e.point)    == true -> onKeepAll()
+                    undoBounds?.contains(e.point)    == true -> onUndoAll()
+                    prevBounds?.contains(e.point)    == true -> onNavigatePrev()
+                    nextBounds?.contains(e.point)    == true -> onNavigateNext()
+                    safeBounds?.contains(e.point)    == true -> onKeepSafe()
+                    refreshBounds?.contains(e.point) == true -> onRefresh()
                 }
             }
         }
@@ -103,12 +107,13 @@ class DiffSummaryPanel(
         val btnFm = getFontMetrics(boldFont())
         val textW = fm.stringWidth("$count remaining")
         val btnH  = btnFm.height + BTN_V_PAD * 2
-        val prevW = btnFm.stringWidth("▲") + BTN_H_PAD * 2
-        val nextW = btnFm.stringWidth("▼") + BTN_H_PAD * 2
-        val safeW = if (hasSafe) btnFm.stringWidth("✓ Accept safe") + BTN_H_PAD * 2 + GAP else 0
-        val keepW = btnFm.stringWidth("✓ Keep all") + BTN_H_PAD * 2
-        val undoW = btnFm.stringWidth("↩ Undo all") + BTN_H_PAD * 2
-        val w = PANEL_H_PAD * 2 + textW + GAP + prevW + GAP + nextW + GAP + safeW + keepW + GAP + undoW
+        val prevW    = btnFm.stringWidth("▲") + BTN_H_PAD * 2
+        val nextW    = btnFm.stringWidth("▼") + BTN_H_PAD * 2
+        val safeW    = if (hasSafe) btnFm.stringWidth("✓ Accept safe") + BTN_H_PAD * 2 + GAP else 0
+        val keepW    = btnFm.stringWidth("✓ Keep all") + BTN_H_PAD * 2
+        val undoW    = btnFm.stringWidth("↩ Undo all") + BTN_H_PAD * 2
+        val refreshW = btnFm.stringWidth("↻ Refresh") + BTN_H_PAD * 2
+        val w = PANEL_H_PAD * 2 + textW + GAP + prevW + GAP + nextW + GAP + safeW + keepW + GAP + undoW + GAP + refreshW
         val h = PANEL_V_PAD * 2 + maxOf(fm.height, btnH)
         return Dimension(w, h)
     }
@@ -206,6 +211,19 @@ class DiffSummaryPanel(
             g2.color = BTN_FG; g2.font = boldFont
             g2.drawString(undoText, curX + BTN_H_PAD, undoY + BTN_V_PAD + btnFm.ascent)
             undoBounds = Rectangle(curX, undoY, undoW, btnH)
+            curX += undoW + GAP
+
+            // ↻ Refresh
+            val refreshText = "↻ Refresh"
+            val refreshW    = btnFm.stringWidth(refreshText) + BTN_H_PAD * 2
+            val refreshY    = midY - btnH / 2
+            g2.composite = alpha(if (hovered == 6) 1.0f else 0.88f)
+            g2.color = NAV_BG
+            g2.fill(RoundRectangle2D.Float(curX.toFloat(), refreshY.toFloat(), refreshW.toFloat(), btnH.toFloat(), BTN_ARC, BTN_ARC))
+            g2.composite = AlphaComposite.SrcOver
+            g2.color = BTN_FG; g2.font = boldFont
+            g2.drawString(refreshText, curX + BTN_H_PAD, refreshY + BTN_V_PAD + btnFm.ascent)
+            refreshBounds = Rectangle(curX, refreshY, refreshW, btnH)
         } finally {
             g2.dispose()
         }

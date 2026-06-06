@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 ### Added
+- "↻ Refresh" button on the floating summary panel that re-fetches HEAD and recomputes the diff in place, so changes made to the index after the diff was first opened are picked up without toggling off and on
+
+### Changed
+- JavaScript plugin classloader is now obtained via `Language.findLanguageByID()` instead of `PluginManager`, using only public platform API
+
+## [0.0.6] - 2026-05-30
+### Added
 - Keyboard shortcuts to jump between diff chunks: `Ctrl+Alt+Shift+Down` (next) and `Ctrl+Alt+Shift+Up` (previous); wraps around at the first/last chunk and shows a "Chunk N of M" hint
 - "▲ / ▼" navigation buttons on the floating summary panel for mouse-driven chunk navigation
 - "✓ Accept safe" button on the floating summary panel that accepts all safe-classified chunks at once, leaving only unsafe ones for review; the button is hidden when no safe chunks remain
